@@ -92,6 +92,8 @@ def main(configs):
     concat=configs['concat_encoder_decoder']   
     if 'efficientnet_key' in configs.keys():
         efficientnet_key = configs['efficientnet_key']                
+    else:
+        efficientnet_key = None
 
     #### augmentations
     Detection_reaults=configs['Detection_reaults']                       # for the test, the detected bounding box provided by GDR Net
@@ -281,13 +283,14 @@ def main(configs):
         
             if success:     
                 # add icp refinement and replace R_predict, t_predict
-                depth_image = read_depth(test_depth_files[obj_id][batch_idx])
-                if dataset_name == 'ycbv' or dataset_name == 'tless':
-                    depth_image = depth_image * 0.1
-                full_mask = compute_original_mask(Bbox, test_img.shape[0], test_img.shape[1], pred_masks[counter])
-                R_refined, t_refined = icp_refiner.refine_poses(t_predict*0.1, R_predict, full_mask, depth_image, cam_K.cpu().detach().numpy())
-                R_predict = R_refined
-                t_predict = t_refined*10.
+                if configs['use_icp']:
+                    depth_image = read_depth(test_depth_files[obj_id][batch_idx])
+                    if dataset_name == 'ycbv' or dataset_name == 'tless':
+                        depth_image = depth_image * 0.1
+                    full_mask = compute_original_mask(Bbox, test_img.shape[0], test_img.shape[1], pred_masks[counter])
+                    R_refined, t_refined = icp_refiner.refine_poses(t_predict*0.1, R_predict, full_mask, depth_image, cam_K.cpu().detach().numpy())
+                    R_predict = R_refined
+                    t_predict = t_refined*10.
                 t_predict = t_predict.reshape((3,1))
 
                 estimated_Rs.append(R_predict)
