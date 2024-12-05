@@ -31,25 +31,25 @@ To use this branch, ensure the following are set up on your system:
 
 After starting the container, execute the following commands in the bash shell:
 
-    ```bash
-    cd ~/ZebraPose/zebrapose
+```bash
+cd ~/ZebraPose/zebrapose
 
-    # Test with the pretrained model
-    python test.py --cfg config/config_BOP/lmo/exp_lmo_BOP.txt --obj_name driller --ckpt_file checkpoints/pretrained_lmo_paper/driller --ignore_bit 0 --eval_output_path results/lmo/pretrained_paper/driller
+# Test with the pretrained model
+python test.py --cfg config/config_BOP/lmo/exp_lmo_BOP.txt --obj_name driller --ckpt_file checkpoints/pretrained_lmo_paper/driller --ignore_bit 0 --eval_output_path results/lmo/pretrained_paper/driller
 
-    # Merge the .csv file generated in the previous step
-    python tools_for_BOP/merge_csv.py --input_dir results/lmo/pretrained_paper/driller/pose_result_bop --output_fn ~/ZebraPose/zebrapose/results/zebrapose_lmo-test.csv
+# Merge the .csv file generated in the previous step
+python tools_for_BOP/merge_csv.py --input_dir results/lmo/pretrained_paper/driller/pose_result_bop --output_fn ~/ZebraPose/zebrapose/results/zebrapose_lmo-test.csv
 
-    # Remove the leading BOM (Byte Order Mark) from the result file so that eval_bop19_pose.py can process it correctly
-    # (Eventually, we will modify merge_csv.py to save the result file without BOM)
-    sed -i '1s/^\xEF\xBB\xBF//' results/zebrapose_lmo-test.csv
+# Remove the leading BOM (Byte Order Mark) from the result file so that eval_bop19_pose.py can process it correctly
+# (Eventually, we will modify merge_csv.py to save the result file without BOM)
+sed -i '1s/^\xEF\xBB\xBF//' results/zebrapose_lmo-test.csv
 
-    cd ~/ZebraPose/bop_toolkit
+cd ~/ZebraPose/bop_toolkit
 
-    # Evaluate and visualize the estimated poses
-    python scripts/eval_bop19_pose.py --renderer_type=vispy --result_filenames=zebrapose_lmo-test.csv --targets_filename=test_targets_bop19_obj8.json
-    python scripts/vis_est_poses.py
-    ```
+# Evaluate and visualize the estimated poses
+python scripts/eval_bop19_pose.py --renderer_type=vispy --result_filenames=zebrapose_lmo-test.csv --targets_filename=test_targets_bop19_obj8.json
+python scripts/vis_est_poses.py
+```
 
 After running the commands above, you will have the following files and directories (along with bunch of others!):
 
