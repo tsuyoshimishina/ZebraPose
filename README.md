@@ -1,106 +1,67 @@
 # ZebraPose
 
-The implementation of the paper 'ZebraPose: Coarse to Fine Surface Encoding for 6DoF Object Pose Estimation' (CVPR2022). [`ArXiv`](https://arxiv.org/abs/2203.09418)
+This branch is dedicated to verifying that ZebraPose is operational on Docker with WSL2 as of Dec 2024. For detailed information about ZebraPose itself, please refer to the [main branch](https://github.com/tsuyoshimishina/ZebraPose/tree/main).
 
-![pipeline](pic/zebrapose-method.png)
+## Prerequisites
 
-## System Requirement
-### Tested Environment
-- Ubuntu 18.04
-- CUDA 11.1
-- Python 3.6
+To use this branch, ensure the following are set up on your system:
 
-### Main Dependencies:
-- [`bop_toolkit`](https://github.com/thodan/bop_toolkit)
-- Pytorch 1.10
-- torchvision 0.11.0
-- opencv-python
-- [`Progressive-X`](https://github.com/danini/progressive-x)
+1. WSL2
+2. Docker
+3. NVIDIA Driver
+4. NVIDIA Container Toolkit
 
-Download with `git clone --recurse-submodules` so that `bop_toolkit` will also be cloned.
+## Setup Instructions
 
-## Training with a dataset in BOP benchmark
-### Training data preparation
-1. Download the dataset from [`BOP benchmark`](https://bop.felk.cvut.cz/datasets/)
+1. Download `docker/Dockerfile` from this repository.
+2. Build the Docker image using the Dockerfile with the following command:
 
-2. Download required ground truth folders of zebrapose from [`owncloud`](https://cloud.dfki.de/owncloud/index.php/s/zT7z7c3e666mJTW). The folders are `models_GT_color`, `XX_GT` (e.g. `train_real_GT` and `test_GT`) and `models` (`models` is optional, only if you want to generate GT from scratch).
-
-3. The expected data structure: 
-    ```
-    .
-    └── BOP ROOT PATH/
-        ├── lmo   
-        ├── ycbv/
-        │   ├── models
-        │   ├── models_eval
-        │   ├── models_fine
-        │   ├── test
-        │   ├── train_pbr
-        │   ├── train_real
-        │   ├── ...               #(other files from BOP page)
-        │   ├── models_GT_color   #(from last step)
-        │   ├── train_pbr_GT      #(from last step)
-        │   ├── train_real_GT     #(from last step)
-        │   ├── test_GT           #(from last step)
-        │   ├── train_pbr_GT_v2   #(from last step, for symmetry aware training)
-        │   ├── train_real_GT_v2  #(from last step, for symmetry aware training)
-        │   └── test_GT_v2        #(from last step, for symmetry aware training)
-        └── tless
+    ```bash
+    docker build -t zebrapose .
     ```
 
-4. Download the 3 [`pretrained resnet`](https://cloud.dfki.de/owncloud/index.php/s/zT7z7c3e666mJTW), save them under `zebrapose/pretrained_backbone/resnet`, and download `pretrained efficientnet` from "https://download.pytorch.org/models/efficientnet_b4_rwightman-7eb33cd5.pth", save it under `zebrapose/pretrained_backbone/efficientnet`
+3. Run the Docker container with the following command:
 
-5. (Optional) Instead of download the ground truth, you can also generate them from scratch, details in [`Generate_GT.md`](Binary_Code_GT_Generator/Generate_GT.md). 
+    ```bash
+    docker run --rm --gpus all -it --name zebrapose zebrapose:latest bash
+    ```
+    (If you want to reuse the container for future runs, you can omit the `--rm` option.)
 
+## Run Inference with Pretrained Model
 
-### Training
-Adjust the paths in the config files, and train the network with `train.py`, e.g.
+After starting the container, execute the following commands in the bash shell:
 
-`python train.py --cfg config/config_BOP/lmo/exp_lmo_BOP.txt --obj_name ape`
+    ```bash
+    cd ~/ZebraPose/zebrapose
 
-The script will save the last 3 checkpoints and the best checkpoint, as well as tensorboard log. To enable sym. aware training, with `--sym_aware_training True`
+    # Test with the pretrained model
+    python test.py --cfg config/config_BOP/lmo/exp_lmo_BOP.txt --obj_name driller --ckpt_file checkpoints/pretrained_lmo_paper/driller --ignore_bit 0 --eval_output_path results/lmo/pretrained_paper/driller
 
-## Test with trained model
-For most datasets, a specific object occurs only once in a test images. 
+    # Merge the .csv file generated in the previous step
+    python tools_for_BOP/merge_csv.py --input_dir results/lmo/pretrained_paper/driller/pose_result_bop --output_fn ~/ZebraPose/zebrapose/results/zebrapose_lmo-test.csv
 
-`python test.py --cfg config/config_BOP/lmo/exp_lmo_BOP.txt --obj_name ape --ckpt_file path/to/the/best/checkpoint --ignore_bit 0 --eval_output_path path/to/save/the/evaluation/report`
+    # Remove the leading BOM (Byte Order Mark) from the result file so that eval_bop19_pose.py can process it correctly
+    # (Eventually, we will modify merge_csv.py to save the result file without BOM)
+    sed -i '1s/^\xEF\xBB\xBF//' results/zebrapose_lmo-test.csv
 
-To use ICP for refinement, use `--use_icp True`
+    cd ~/ZebraPose/bop_toolkit
 
-For datasets like tless, the number of a a specific object is unknown in the test stage.
+    # Evaluate and visualize the estimated poses
+    python scripts/eval_bop19_pose.py --renderer_type=vispy --result_filenames=zebrapose_lmo-test.csv --targets_filename=test_targets_bop19_obj8.json
+    python scripts/vis_est_poses.py
+    ```
 
-`python test_vivo.py --cfg config/config_BOP/tless/exp_tless_BOP.txt --ckpt_file path/to/the/best/checkpoint --ignore_bit 0 --obj_name obj01 --eval_output_path path/to/save/the/evaluation/report`
+After running the commands above, you will have the following files and directories (along with bunch of others!):
 
-To use ICP for refinement, use `--use_icp True`
+- Pose Estimation Results:  
+  `~/ZebraPose/zebrapose/results/zebrapose_lmo-test.csv`
+- Pose Estimation Errors (e.g. $e_\text{MSSD}$):  
+  `~/ZebraPose/zebrapose/eval/zebrapose_lmo-test/error=mssd_ntop=-1/errors_000002.json`
+- Pose Estimation Result Images Directory:  
+  `~/ZebraPose/zebrapose/visualizations/vis_est_poses/zebrapose_lmo-test/000002`
 
-Download our trained model from this [`link`](https://cloud.dfki.de/owncloud/index.php/s/EmQDWgd5ipbdw3E). The ProgressiveX can not set random seed in its python API. The ADD results can be +/- 0.5%.
+You can visually compare the result images to the test images located in `~/ZebraPose/zebrapose/bop_datasets/lmo/test/000002/rgb`, like below:
 
-## Evaluate for BOP challange 
-Merge the `.csv` files generated in the last step using `tools_for_BOP/merge_csv.py`, e.g.
-
-`python merge_csv.py --input_dir /dir/to/pose_result_bop/lmo --output_fn zebrapose_lmo-test.csv` 
-
-And then evaluate it according to [`bop_toolkit`](https://github.com/thodan/bop_toolkit)
-
-
-## Difference between ArXiv v1 and v2
-The results were reported with the same checkpoints. We fixed a bug that only influence the inference results: 
-
-The PnP solver requires the Bbox size to calculate the 2D pixel location in the original image. We modified the Bbox size in the dataloader. The bug is that we didn't update this modification for the PnP solver. If you remove the `get_final_Bbox` in the dataloader, you will get the results reported in v1. 
-
-The bug has more influence if we resize the Bbox using `crop_square_resize`. After we fixed the bug, we used `crop_square_resize` for BOP challange (instead of `crop_resize` in the config files in config_paper). We think this resize method should work better since it will not introduce distortion. However, we didn't compare resize methods with experiments.
-
-
-## Acknowledgement
-The original code has been developed together with [`Mahdi Saleh`](https://github.com/mahdi-slh). Some code are adapted from [`Pix2Pose`](https://github.com/kirumang/Pix2Pose), [`SingleShotPose`](https://github.com/microsoft/singleshotpose), [`GDR-Net`](https://github.com/THU-DA-6D-Pose-Group/GDR-Net), and [`Deeplabv3`]().
-
-
-## Citation
-```
-@article{su2022zebrapose,
-  title={ZebraPose: Coarse to Fine Surface Encoding for 6DoF Object Pose Estimation},
-  author={Su, Yongzhi and Saleh, Mahdi and Fetzer, Torben and Rambach, Jason and Navab, Nassir and Busam, Benjamin and Stricker, Didier and Tombari, Federico},
-  journal={arXiv preprint arXiv:2203.09418},
-  year={2022}
-}
-```
+| Test image | Result image |
+|----|----|
+| ![Test image](pic/000894.png) | ![Result image](pic/000894_000008.jpg) |
